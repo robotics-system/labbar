@@ -51,7 +51,7 @@ ros2 run turtlesim_goal gotogoal.py
    - Publisher/subscriber topic mixup
    - Distance calculation errors
    - Control logic issues for smooth navigation
-   - Angular velocity control for proper orientation
+   - Import message type for angular velocity
 
 ## Testing Your Solution
 
