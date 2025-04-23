@@ -4,7 +4,7 @@ import os
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, RegisterEventHandler
-from launch.substitutions import LaunchConfiguration
+from launch.substitutions import LaunchConfiguration, PythonExpression
 from launch.actions import IncludeLaunchDescription, ExecuteProcess
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch_ros.actions import Node
@@ -41,7 +41,8 @@ def generate_launch_description():
     enable_rviz = LaunchConfiguration('enable_rviz', default='true')
     rviz_config_file = LaunchConfiguration('rviz_config_file', default=default_rviz_config)
     params_file = LaunchConfiguration('nav_params_file', default=default_nav_params)
-    
+    use_simulator = LaunchConfiguration('use_simulator')
+    headless = LaunchConfiguration('headless')
     # --- Launch Arguments Declarations ---
     declare_use_sim_time_arg = DeclareLaunchArgument(
         name='use_sim_time', default_value='true', description='Use simulator time'
@@ -57,16 +58,28 @@ def generate_launch_description():
         'nav_params_file', default_value=default_nav_params,
         description='Full path to the ROS2 parameters file to use for all launched nodes'
     )
-
+    declare_use_simulator_cmd = DeclareLaunchArgument(
+        'use_simulator',
+        default_value='True',
+        description='Whether to start the simulator')
+    
+    declare_simulator_cmd = DeclareLaunchArgument(
+        'headless',
+        default_value='True',
+        description='Whether to execute gzclient)')
     # --- Nodes and Launch Includes ---
     # Gazebo
-    gzserver_cmd = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(os.path.join(gazebo_ros_dir, 'launch', 'gzserver.launch.py')),
-        launch_arguments={'world': world_file}.items(),
-    )
-    gzclient_cmd = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(os.path.join(gazebo_ros_dir, 'launch', 'gzclient.launch.py')),
-    )
+    start_gazebo_server_cmd = ExecuteProcess(
+        condition=IfCondition(use_simulator),
+        cmd=['gzserver', '-s', 'libgazebo_ros_init.so',
+             '-s', 'libgazebo_ros_factory.so', world_file],
+        cwd=[os.path.join(bringup_dir, 'launch')], output='screen')
+
+    start_gazebo_client_cmd = ExecuteProcess(
+        condition=IfCondition(PythonExpression(
+            [use_simulator, ' and not ', headless])),
+        cmd=['gzclient'],
+        cwd=[os.path.join(bringup_dir, 'launch')], output='screen')
 
     # Common Remappings
     remappings = [('/tf', 'tf'), ('/tf_static', 'tf_static')]
@@ -167,9 +180,11 @@ def generate_launch_description():
     ld.add_action(declare_enable_rviz_arg)
     ld.add_action(declare_rviz_config_file_arg)
     ld.add_action(declare_params_file_arg)
+    ld.add_action(declare_use_simulator_cmd)
+    ld.add_action(declare_simulator_cmd)
 
-    ld.add_action(gzserver_cmd)
-    ld.add_action(gzclient_cmd)
+    ld.add_action(start_gazebo_server_cmd)
+    ld.add_action(start_gazebo_client_cmd)
 
     ld.add_action(map_server_node)
     ld.add_action(map_server_lifecycle_node)
