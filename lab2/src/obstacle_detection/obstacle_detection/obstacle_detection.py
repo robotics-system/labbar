@@ -6,6 +6,9 @@ from rclpy.qos import qos_profile_sensor_data
 from rclpy.qos import QoSProfile
 from sensor_msgs.msg import LaserScan
 import math
+from nav_msgs.msg import Odometry
+from geometry_msgs.msg import Pose
+from tf_transformations import euler_from_quaternion
 
 
 class ObstacleDetection(Node):
@@ -22,7 +25,8 @@ class ObstacleDetection(Node):
         self.declare_parameter("stop_distance", 0.35)  # Default if not specified
         self.stop_distance = self.get_parameter("stop_distance").get_parameter_value().double_value
         self.get_logger().info(f"Using stop_distance: {self.stop_distance}m")
-        
+        self.pose = Pose()
+        self.odom_sub = self.create_subscription(Odometry, "odom", self.get_odom_callback, qos_profile=qos_profile_sensor_data)
         # Store received data
         self.scan_ranges = []
         self.has_scan_received = False
@@ -52,6 +56,12 @@ class ObstacleDetection(Node):
         # Set up timer for regular checking
         self.timer = self.create_timer(0.1, self.timer_callback)
 
+    def get_odom_callback(self, msg):
+        self.pose = msg.pose.pose
+        oriList = [self.pose.orientation.x, self.pose.orientation.y, self.pose.orientation.z, self.pose.orientation.w]
+        (roll, pitch, yaw) = euler_from_quaternion(oriList)
+        self.get_logger().info(f"Robot state  {self.pose.position.x, self.pose.position.y, yaw}")
+
     def scan_callback(self, msg):
         """Store laser scan data when received"""
         self.scan_ranges = msg.ranges
@@ -72,21 +82,31 @@ class ObstacleDetection(Node):
         
         MAIN TASK:
         - Detect if any obstacle is too close to the robot (closer than self.stop_distance)
-        - If an obstacle is detected, stop the robot's forward motion
+        - Turn if obstacle is close
         
         UNDERSTANDING LASER SCAN DATA:
         - self.scan_ranges contains distances to obstacles in meters
         - Each value represents distance at a different angle around the robot
         - Values less than self.stop_distance indicate a close obstacle
         
+        UNDERSTANDING POSE (Pose message)
+        - self.pose.position.x: x position of the robot
+        - self.pose.position.y: y position of the robot
+        - yaw: heading of the robot, converted from quaternions for your convinence (in radians)
+
+        CREATE CONTROL SIGNAL FOR ANGULAR VELOCITY
+        - Compare angle to goal or obstacle with the current angle of the robot, i.e
+        - e_theta = (gtg-yaw)
+        - make sure it wraps between pi and -pi
+        - e_theta = atan2(sin(e_theta), cos(e_theta))
+        - twist.angular.z = P * e_theta
+        - Choose P
+        
+
         CONTROLLING THE ROBOT (Twist message):
         - twist.linear.x: Forward/backward (positive = forward, negative = backward)
         - twist.angular.z: Rotation (positive = left, negative = right)
         - To stop: set twist.linear.x = 0.0 (you can keep angular.z to allow turning)
-        
-        EXTENSION (optional):
-        - For obstacle avoidance, implement turning when obstacles are detected
-        - Try to find clear paths by checking different parts of the scan data
         """
         # Filter out invalid readings (very small values, infinity, or NaN)
         valid_ranges = [r for r in self.scan_ranges if not math.isinf(r) and not math.isnan(r) and r > 0.01]
@@ -101,7 +121,8 @@ class ObstacleDetection(Node):
 
         # TODO: Implement your obstacle detection logic here!
         # Remember to use obstacle_distance and self.stop_distance in your implementation.
-        
+        # Remember to find the angle of the closest obstacle
+
         # For now, just use the teleop command (unsafe - replace with your code)
         twist = self.tele_twist
 
