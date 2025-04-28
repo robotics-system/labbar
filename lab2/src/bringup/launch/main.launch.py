@@ -83,15 +83,14 @@ def generate_launch_description():
             "libgazebo_ros_factory.so",
             world_file,
         ],
-        cwd=[os.path.join(gazebo_ros_dir, "launch")],
+        cwd=[os.path.join(bringup_dir, "launch")],
         output="screen",
         sigterm_timeout="5",
     )
-
     start_gazebo_client_cmd = ExecuteProcess(
         condition=IfCondition(PythonExpression([use_simulator, " and not ", headless])),
         cmd=["gzclient"],
-        cwd=[os.path.join(gazebo_ros_dir, "launch")],
+        cwd=[os.path.join(bringup_dir, "launch")],
         output="screen",
         sigterm_timeout="5",
     )
