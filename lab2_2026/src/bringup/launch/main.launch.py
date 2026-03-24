@@ -15,7 +15,7 @@ from launch.event_handlers import OnProcessExit
 def generate_launch_description():
     # --- Paths ---
     bringup_dir = get_package_share_directory("bringup")
-    gazebo_ros_dir = get_package_share_directory("gazebo_ros")
+    ros_gz_sim_dir = get_package_share_directory("ros_gz_sim")
     nav2_bt_navigator_dir = get_package_share_directory("nav2_bt_navigator")
 
     # Default paths for files
@@ -30,6 +30,7 @@ def generate_launch_description():
         "navigate_w_replanning_and_recovery.xml",
     )
     burger_sdf = os.path.join(bringup_dir, "models", "turtlebot3_burger", "model.sdf")
+    bridge_params = os.path.join(bringup_dir, "params", "turtlebot3_burger_bridge.yaml")
 
     # Read URDF file content
     with open(urdf_file, "r") as infp:
@@ -73,26 +74,20 @@ def generate_launch_description():
     )
     # --- Nodes and Launch Includes ---
     # Gazebo
-    start_gazebo_server_cmd = ExecuteProcess(
+    start_gazebo_server_cmd = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            os.path.join(ros_gz_sim_dir, "launch", "gz_sim.launch.py")
+        ),
+        launch_arguments={"gz_args": ["-r -s -v2 ", world_file], "on_exit_shutdown": "true"}.items(),
         condition=IfCondition(use_simulator),
-        cmd=[
-            "gzserver",
-            "-s",
-            "libgazebo_ros_init.so",
-            "-s",
-            "libgazebo_ros_factory.so",
-            world_file,
-        ],
-        cwd=[os.path.join(bringup_dir, "launch")],
-        output="screen",
-        sigterm_timeout="5",
     )
-    start_gazebo_client_cmd = ExecuteProcess(
+    
+    start_gazebo_client_cmd = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            os.path.join(ros_gz_sim_dir, "launch", "gz_sim.launch.py")
+        ),
+        launch_arguments={"gz_args": "-g -v2 ", "on_exit_shutdown": "true"}.items(),
         condition=IfCondition(PythonExpression([use_simulator, " and not ", headless])),
-        cmd=["gzclient"],
-        cwd=[os.path.join(bringup_dir, "launch")],
-        output="screen",
-        sigterm_timeout="5",
     )
 
     # Common Remappings
@@ -136,13 +131,13 @@ def generate_launch_description():
 
     # Spawn Turtlebot3 Burger
     spawn_robot_node = Node(
-        package="gazebo_ros",
-        executable="spawn_entity.py",
+        package="ros_gz_sim",
+        executable="create",
         arguments=[
             "-file",
             burger_sdf,
-            "-entity",
-            "tb1",
+            "-name",
+            "turtlebot3_burger",
             "-x",
             "-1.5",
             "-y",
@@ -151,10 +146,21 @@ def generate_launch_description():
             "0.01",
             "-Y",
             "0.0",
-            "-unpause",
         ],
         output="screen",
         condition=IfCondition(use_simulator),
+    )
+
+    # ROS-GZ Bridge
+    gazebo_ros_bridge_cmd = Node(
+        package="ros_gz_bridge",
+        executable="parameter_bridge",
+        parameters=[{
+            "config_file": bridge_params,
+            "expand_gz_topic_names": True,
+            "use_sim_time": use_sim_time,
+        }],
+        output="screen",
     )
 
     # Navigation2 Bringup
@@ -257,6 +263,7 @@ def generate_launch_description():
     ld.add_action(map_server_node)
     ld.add_action(map_server_lifecycle_node)
 
+    ld.add_action(gazebo_ros_bridge_cmd)
     ld.add_action(spawn_robot_node)
 
     ld.add_action(register_core_on_spawn_exit)
