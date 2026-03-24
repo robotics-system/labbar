@@ -180,26 +180,6 @@ def generate_launch_description():
             "log_level": "warn",
         }.items(),
     )
-    initial_pose_message = (
-        "{header: {frame_id: map}, pose: {pose: {position: {x: "
-        f"{-1.5}, y: {-0.5}, z: {0.01}"
-        "}, orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0000000}}, }}"
-    )
-    initial_pose_cmd = ExecuteProcess(
-        cmd=[
-            "ros2",
-            "topic",
-            "pub",
-            "-t",
-            "3",
-            "--qos-reliability",
-            "reliable",
-            "/initialpose",
-            "geometry_msgs/PoseWithCovarianceStamped",
-            initial_pose_message,
-        ],
-        output="screen",
-    )
 
     # RViz
     rviz_cmd = IncludeLaunchDescription(
@@ -219,7 +199,6 @@ def generate_launch_description():
     actions_on_spawn_exit = [
         robot_state_publisher_node,
         nav2_bringup_cmd,
-        initial_pose_cmd,
     ]
 
     register_core_on_spawn_exit = RegisterEventHandler(
