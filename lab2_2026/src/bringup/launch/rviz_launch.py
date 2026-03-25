@@ -52,12 +52,12 @@ def generate_launch_description():
         default_value=os.path.join(bringup_dir, 'rviz', 'nav2_default_view.rviz'),
         description='Full path to the RVIZ config file to use')
 
-    # Launch rviz
     start_rviz_cmd = Node(
         condition=UnlessCondition(use_namespace),
         package='rviz2',
         executable='rviz2',
         arguments=['-d', rviz_config_file],
+        parameters=[{'use_sim_time': LaunchConfiguration('use_sim_time')}],
         output='screen')
 
     namespaced_rviz_config_file = ReplaceString(
@@ -70,6 +70,7 @@ def generate_launch_description():
         executable='rviz2',
         namespace=namespace,
         arguments=['-d', namespaced_rviz_config_file],
+        parameters=[{'use_sim_time': LaunchConfiguration('use_sim_time')}],
         output='screen',
         remappings=[('/tf', 'tf'),
                     ('/tf_static', 'tf_static'),
