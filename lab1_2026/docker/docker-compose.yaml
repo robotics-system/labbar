@@ -1,0 +1,12 @@
+services:
+  demos:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: demos_dev
+    network_mode: host
+    user: "${DOCKER_UID:-1000}:${DOCKER_GID:-1000}"
+    stdin_open: true
+    tty: true
+    volumes:
+      - ..:/workspace:rw
