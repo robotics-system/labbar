@@ -27,7 +27,7 @@ def generate_launch_description():
     default_bt_xml = os.path.join(
         nav2_bt_navigator_dir,
         "behavior_trees",
-        "navigate_w_replanning_and_recovery.xml",
+        "navigate_to_pose_w_replanning_and_recovery.xml",
     )
     burger_sdf = os.path.join(bringup_dir, "models", "turtlebot3_burger", "model.sdf")
     bridge_params = os.path.join(bringup_dir, "params", "turtlebot3_burger_bridge.yaml")
@@ -157,7 +157,7 @@ def generate_launch_description():
         executable="parameter_bridge",
         parameters=[{
             "config_file": bridge_params,
-            "expand_gz_topic_names": True,
+            "expand_gz_topic_names": False,
             "use_sim_time": use_sim_time,
         }],
         output="screen",
