@@ -1,0 +1,253 @@
+<h2>Lab 3 &ndash; Autonom navigering med adaptiv hastighetsreglering</h2>
+
+<p>
+  I den här laborationen använder ni roboten TurtleBot 3 Burger och ROS 2 Jazzy.
+  Ni ska kartlägga en miljö med SLAM och sedan skriva en ROS 2-nod som kontinuerligt
+  läser LIDAR-data och dynamiskt skalar robotens hastighet beroende på hur nära
+  hinder befinner sig. Systemet ska kunna hantera hinder som <em>inte</em> finns
+  på kartan, t.ex. ett föremål som någon ställt i vägen.
+</p>
+
+<p>
+  Labben examinerar lärandemål 4 och 5:
+</p>
+<ul>
+  <li>4. Utveckla och implementera mjukvara för enklare autonomt beslutstagande</li>
+  <li>5. Utveckla och implementera ett agerande hos en robot med säkerhet i åtanke</li>
+</ul>
+<p>Betyg: U eller G.</p>
+
+<hr />
+
+<h3>Utrustning och uppkoppling</h3>
+
+<p>
+  Ni får två micro-SD-kort per grupp. Korten är numrerade med ert gruppnummer och
+  innehåller en färdiginstallerad ROS 2 Jazzy-miljö. Ni har sudo-rättigheter om
+  ni behöver installera paket.
+</p>
+
+<p>Sätt <code>ROS_DOMAIN_ID</code> på era egna datorer enligt följande:</p>
+<ul>
+  <li>Grupp 1 &rarr; ROS_DOMAIN_ID=11</li>
+  <li>Grupp 2 &rarr; ROS_DOMAIN_ID=12</li>
+  <li>... och så vidare upp till grupp 11 &rarr; ROS_DOMAIN_ID=21</li>
+</ul>
+<p>ROS_DOMAIN_ID på SD-korten är redan satta och matchar tabellen ovan.</p>
+
+<p>Koppla upp er mot roboten via SSH:</p>
+<pre><code>ssh robotX-wifi</code></pre>
+<p>där <code>X</code> byts ut mot robotens nummer (siffran på lappen på roboten).</p>
+
+<p>
+  Starta roboten genom att sätta i SD-kortet i Raspberry Pi:n, koppla in batteriet
+  (den röd/svarta kabeln). Låt den andra kontakten vara urkopplad.
+  Om batteriet behöver laddas, ta ur det ur roboten och använd batteriladdaren.
+</p>
+
+<hr />
+
+<h3>Del 3.1 &ndash; SLAM: Kartlägg labyrinten</h3>
+
+<p>
+  Börja med att kartlägga den labyrint som finns uppställd i labsalen.
+  Ni ska kunna upprepa detta moment under redovisningen.
+</p>
+
+<ol>
+  <li>Starta robot-bringup på roboten (via SSH):
+    <pre><code>ros2 launch turtlebot3_bringup robot.launch.py</code></pre>
+  </li>
+  <li>Starta SLAM Toolbox på er dator:
+    <pre><code>ros2 launch slam_toolbox online_async_launch.py \
+  slam_params_file:=/opt/ros/jazzy/share/slam_toolbox/config/mapper_params_online_async.yaml \
+  use_sim_time:=false</code></pre>
+  </li>
+  <li>Starta teleoperation för att köra runt roboten och bygga kartan:
+    <pre><code>ros2 run turtlebot3_teleop teleop_keyboard</code></pre>
+  </li>
+  <li>Visualisera kartan i RViz medan ni kör.</li>
+  <li>När kartan ser komplett ut, spara den:
+    <pre><code>ros2 run nav2_map_server map_saver_cli -f ~/map/my_map</code></pre>
+    Det skapas två filer: <code>my_map.pgm</code> (bildfilen) och <code>my_map.yaml</code> (metadata).
+  </li>
+</ol>
+
+<p><strong>Tips:</strong> Kör roboten lugnt och metodiskt. SLAM fungerar bättre om ni undviker att snurra fort på stället.</p>
+
+<hr />
+
+<h3>Del 3.2 &ndash; Adaptiv hastighetsreglering och navigering</h3>
+
+<p>
+  Ni ska nu bygga ett system där robotens hastighet kontinuerligt anpassas utifrån
+  vad LIDAR-sensorn ser. En separat nod sitter "mitt i" kommandokedjan mellan
+  Nav2 och roboten, läser sensordata och modifierar hastighetsbefällen i realtid.
+</p>
+
+<h4>3.2.1 Starta Nav2 med er karta</h4>
+
+<p>Ladda in kartan och starta navigationsstacken:</p>
+<pre><code>ros2 launch nav2_bringup bringup_launch.py \
+  map:=$HOME/map/my_map.yaml \
+  use_sim_time:=false</code></pre>
+
+<p>
+  Ge roboten en initial positionsuppskattning i RViz med verktyget
+  <em>2D Pose Estimate</em> innan ni startar er nod.
+</p>
+
+<p>
+  Välj ett mål i RViz med <em>Nav2 Goal</em>, eller skicka målet programmatiskt.
+  Roboten ska navigera till målet med er säkerhetsnod aktiv.
+</p>
+
+<h4>3.2.2 Förstå LaserScan-meddelandet</h4>
+
+<p>
+  TurtleBot Burger är utrustad med en LIDAR-sensor (LDS-02) som publicerar data
+  på topicet <code>/scan</code> som meddelanden av typen <code>sensor_msgs/LaserScan</code>.
+  Undersök meddelandets struktur:
+</p>
+<pre><code>ros2 topic echo /scan --once</code></pre>
+<p>Relevanta fält:</p>
+<ul>
+  <li><code>angle_min</code> och <code>angle_max</code> &ndash; mätningarnas vinkelintervall (radianer).</li>
+  <li><code>angle_increment</code> &ndash; vinkelsteg mellan varje mätpunkt (radianer).</li>
+  <li><code>ranges</code> &ndash; lista med avståndsmätningar (meter). Index 0 motsvarar <code>angle_min</code>.</li>
+  <li><code>range_min</code> och <code>range_max</code> &ndash; sensorns giltiga mätintervall. Värden utanför detta intervall är ogiltiga och ska filtreras bort.</li>
+</ul>
+
+<p>
+  Vinkeln för ett visst index <code>i</code> i <code>ranges</code>-listan beräknas som:
+</p>
+<pre><code>angle = angle_min + i * angle_increment</code></pre>
+
+<p>
+  Robotens "fram" motsvarar vinkel 0. Positiva vinklar är åt vänster, negativa åt höger
+  (ROS standard, högerhandsregel).
+</p>
+
+<h4>3.2.3 Beräkna ett faroindex</h4>
+
+<p>
+  Ni ska välja en <strong>framåtsektor</strong> (t.ex. ett vinkelintervall på &plusmn;30&deg; runt rakt fram)
+  och beräkna det minsta giltiga avståndet i den sektorn. Det är detta värde som avgör
+  hur stor fara roboten befinner sig i.
+</p>
+
+<p>
+  Ni ska definiera tre zoner och vad som händer i varje:
+</p>
+
+<table border="1" cellpadding="6" cellspacing="0">
+  <thead>
+    <tr>
+      <th>Zon</th>
+      <th>Minsta avstånd i sektorn</th>
+      <th>Beteende</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Fri</td>
+      <td>Över ett övre tröskelvärde (t.ex. &gt; 0.6 m)</td>
+      <td>Full hastighet tillåts</td>
+    </tr>
+    <tr>
+      <td>Varning</td>
+      <td>Mellan undre och övre tröskelvärde</td>
+      <td>Hastigheten skalas ner linjärt mot noll</td>
+    </tr>
+    <tr>
+      <td>Stopp</td>
+      <td>Under ett undre tröskelvärde (t.ex. &lt; 0.2 m)</td>
+      <td>Roboten stannar och backar</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>
+  Ni väljer själva tröskelvärden, men de ska vara motiverade och fungera under
+  redovisningen. Tänk på att Burger har ett maxhastighet på ca 0.22 m/s.
+</p>
+
+<h4>3.2.4 Säkerhetsnoden &ndash; hastighetsskalning i realtid</h4>
+
+<p>
+  Skriv en ROS 2-nod i Python med följande arkitektur:
+</p>
+<ul>
+  <li>Prenumererar på <code>/scan</code> (<code>sensor_msgs/LaserScan</code>).</li>
+  <li>Prenumererar på <code>/cmd_vel_nav</code> &ndash; hastighetsbefäl från Nav2 (ni ändrar Nav2:s output-topic, se nedan).</li>
+  <li>Publicerar på <code>/cmd_vel</code> &ndash; det modifierade hastighetsbefälet som roboten faktiskt får.</li>
+</ul>
+
+<p>
+  I varje LIDAR-callback beräknar noden skalningsfaktorn <code>scale</code> (ett tal
+  mellan 0.0 och 1.0) baserat på faroindexet ovan. I varje <code>/cmd_vel_nav</code>-callback
+  multiplicerar noden det inkomna befälet med <code>scale</code> och publicerar det:
+</p>
+<pre><code>scaled_twist = Twist()
+scaled_twist.linear.x  = incoming_twist.linear.x  * self.scale
+scaled_twist.angular.z = incoming_twist.angular.z * self.scale
+self.cmd_vel_pub.publish(scaled_twist)</code></pre>
+
+<p>
+  Om roboten är i <strong>Stopp-zonen</strong> ska noden ignorera inkommande befäl och istället
+  publicera ett backa-kommando (negativt <code>linear.x</code>) under en kort tid,
+  och sedan stoppa och vänta tills Nav2 replannerar.
+</p>
+
+<p>
+  Ändra Nav2:s output-topic så att det inte krockar med er nod. Lägg till ett
+  remapping-argument när ni startar Nav2:
+</p>
+<pre><code>ros2 launch nav2_bringup bringup_launch.py \
+  map:=$HOME/map/my_map.yaml \
+  use_sim_time:=false \
+  --ros-args --remap /cmd_vel:=/cmd_vel_nav</code></pre>
+
+<p><strong>OBS:</strong> Verifiera att er nod faktiskt är den enda som publicerar på <code>/cmd_vel</code>:</p>
+<pre><code>ros2 topic info /cmd_vel</code></pre>
+
+<h4>3.2.5 Logga skalningsfaktorn</h4>
+
+<p>
+  Noden ska med jämna mellanrum (t.ex. varje sekund) logga aktuell skalningsfaktor
+  och minsta uppmätta avstånd, t.ex.:
+</p>
+<pre><code>[safety_node] Avstånd fram: 0.43 m | Skala: 0.48 | Zon: VARNING</code></pre>
+<p>
+  Det gör det möjligt att under redovisningen se att noden reagerar korrekt.
+</p>
+
+<h4>3.2.6 Krav på redovisningen</h4>
+<p>Under redovisningen ska ni:</p>
+<ul>
+  <li>Köra SLAM och spara en karta (kan förberedas i förväg).</li>
+  <li>Starta navigering mot ett mål i RViz och visa att roboten navigerar autonomt.</li>
+  <li>Placera ett hinder (t.ex. en låda) i robotens väg &ndash; hindret ska <em>inte</em> finnas på kartan.
+      Visa att roboten saktar in och stannar, och att Nav2 replannerar runt hindret.</li>
+  <li>Visa loggar som bekräftar att skalningsfaktorn ändras i realtid.</li>
+  <li>Förklara: Varför modifierar ni <code>/cmd_vel_nav</code> snarare än att publicera direkt på <code>/cmd_vel</code> från Nav2? Vad händer om er nod kraschar?</li>
+</ul>
+
+<hr />
+
+<h3>Del 3.3 &ndash; Rapport</h3>
+
+<p>Skriv en rapport på 2&ndash;3 sidor som innehåller:</p>
+<ul>
+  <li>En bild av den kartlagda labyrinten.</li>
+  <li>Ett diagram som illustrerar er nods arkitektur: vilka topics prenumereras på, vad beräknas, vad publiceras.</li>
+  <li>En beskrivning av de tre zonerna och motivering av era valda tröskelvärden.</li>
+  <li>En kortfattad förklaring av hur SLAM fungerar och vad som lagras i kartans <code>.yaml</code>- och <code>.pgm</code>-filer.</li>
+  <li>Reflektion: Vad skulle kunna gå fel med er lösning i en verklig miljö? Hur skulle ni förbättra den?</li>
+</ul>
+
+<p>Ladda upp rapporten som PDF här på Canvas.</p>
+
+<hr />
+
+<p><em>Betyg: U eller G. Inlämning: rapport + godkänd redovisning.</em></p>

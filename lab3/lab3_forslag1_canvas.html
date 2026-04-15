@@ -1,0 +1,246 @@
+<h2>Lab 3 &ndash; Autonom navigering med tillståndsmaskin</h2>
+
+<p>
+  I den här laborationen använder ni roboten TurtleBot 3 Burger och ROS 2 Jazzy.
+  Ni ska kartlägga en miljö med SLAM, och sedan skriva en ROS 2-nod som navigerar
+  roboten autonomt till en sekvens av mål med hjälp av en explicit tillståndsmaskin.
+  Ni ska även implementera en separat säkerhetsnod som alltid kan stoppa roboten,
+  oavsett vad navigeringsnoden gör.
+</p>
+
+<p>
+  Labben examinerar lärandemål 4 och 5:
+</p>
+<ul>
+  <li>4. Utveckla och implementera mjukvara för enklare autonomt beslutstagande</li>
+  <li>5. Utveckla och implementera ett agerande hos en robot med säkerhet i åtanke</li>
+</ul>
+<p>Betyg: U eller G.</p>
+
+<hr />
+
+<h3>Utrustning och uppkoppling</h3>
+
+<p>
+  Ni får två micro-SD-kort per grupp. Korten är numrerade med ert gruppnummer och
+  innehåller en färdiginstallerad ROS 2 Jazzy-miljö. Ni har sudo-rättigheter om
+  ni behöver installera paket.
+</p>
+
+<p>Sätt <code>ROS_DOMAIN_ID</code> på era egna datorer enligt följande:</p>
+<ul>
+  <li>Grupp 1 &rarr; ROS_DOMAIN_ID=11</li>
+  <li>Grupp 2 &rarr; ROS_DOMAIN_ID=12</li>
+  <li>... och så vidare upp till grupp 11 &rarr; ROS_DOMAIN_ID=21</li>
+</ul>
+<p>ROS_DOMAIN_ID på SD-korten är redan satta och matchar tabellen ovan.</p>
+
+<p>Koppla upp er mot roboten via SSH:</p>
+<pre><code>ssh robotX-wifi</code></pre>
+<p>där <code>X</code> byts ut mot robotens nummer (siffran på lappen på roboten).</p>
+
+<p>
+  Starta roboten genom att sätta i SD-kortet i Raspberry Pi:n, koppla in batteriet
+  (den röd/svarta kabeln). Låt den andra kontakten vara urkopplad.
+  Om batteriet behöver laddas, ta ur det ur roboten och använd batteriladdaren.
+</p>
+
+<hr />
+
+<h3>Del 3.1 &ndash; SLAM: Kartlägg labyrinten</h3>
+
+<p>
+  Börja med att kartlägga den labyrint som finns uppställd i labsalen.
+  Ni ska kunna upprepa detta moment under redovisningen.
+</p>
+
+<ol>
+  <li>Starta robot-bringup på roboten (via SSH):
+    <pre><code>ros2 launch turtlebot3_bringup robot.launch.py</code></pre>
+  </li>
+  <li>Starta SLAM Toolbox på er dator:
+    <pre><code>ros2 launch slam_toolbox online_async_launch.py \
+  slam_params_file:=/opt/ros/jazzy/share/slam_toolbox/config/mapper_params_online_async.yaml \
+  use_sim_time:=false</code></pre>
+  </li>
+  <li>Starta teleoperation för att köra runt roboten och bygga kartan:
+    <pre><code>ros2 run turtlebot3_teleop teleop_keyboard</code></pre>
+  </li>
+  <li>Visualisera kartan i RViz medan ni kör.</li>
+  <li>När kartan ser komplett ut, spara den:
+    <pre><code>ros2 run nav2_map_server map_saver_cli -f ~/map/my_map</code></pre>
+    Det skapas två filer: <code>my_map.pgm</code> (bildfilen) och <code>my_map.yaml</code> (metadata).
+  </li>
+</ol>
+
+<p><strong>Tips:</strong> Kör roboten lugnt och metodiskt. SLAM fungerar bättre om ni undviker att snurra fort på stället.</p>
+
+<hr />
+
+<h3>Del 3.2 &ndash; Waypoint-navigering med tillståndsmaskin och säkerhetsnod</h3>
+
+<p>
+  Ni ska nu bygga ett system bestående av två ROS 2-noder som arbetar tillsammans:
+</p>
+<ol>
+  <li><strong>Navigeringsnoden</strong> &ndash; styr roboten mot en sekvens av mål via Nav2.</li>
+  <li><strong>Säkerhetsnoden</strong> &ndash; övervakar LIDAR och kan alltid bryta navigeringen.</li>
+</ol>
+
+<h4>3.2.1 Starta Nav2 med er karta</h4>
+
+<p>Ladda in kartan och starta navigationsstacken:</p>
+<pre><code>ros2 launch nav2_bringup bringup_launch.py \
+  map:=$HOME/map/my_map.yaml \
+  use_sim_time:=false</code></pre>
+
+<p>
+  Ge roboten en initial positionsuppskattning i RViz med verktyget
+  <em>2D Pose Estimate</em> innan ni startar era noder.
+</p>
+
+<h4>3.2.2 Waypoints från konfigurationsfil</h4>
+
+<p>
+  Skapa en YAML-fil som beskriver de waypoints roboten ska besöka, i ordning.
+  Koordinaterna anges i kartans koordinatsystem (meter, radianer).
+  Exempel på format:
+</p>
+<pre><code>waypoints:
+  - x: 1.0
+    y: 0.5
+    yaw: 0.0
+  - x: 2.5
+    y: 1.2
+    yaw: 1.57
+  - x: 0.0
+    y: 0.0
+    yaw: 3.14</code></pre>
+
+<p>
+  Ni väljer själva waypoints som är rimliga för er karta. Ni ska ha <strong>minst tre</strong> waypoints.
+  Ni kan ta reda på koordinater för lämpliga punkter i RViz (klicka på kartan och läs av
+  koordinaterna i statusfältet).
+</p>
+
+<h4>3.2.3 Navigeringsnoden med tillståndsmaskin</h4>
+
+<p>
+  Skriv en ROS 2-nod i Python som läser waypoints från YAML-filen och skickar dem
+  som mål till Nav2:s action server <code>NavigateToPose</code>.
+  Noden ska ha en explicit tillståndsmaskin. Ni ska implementera <strong>minst</strong> följande tillstånd:
+</p>
+
+<ul>
+  <li><strong>IDLE</strong> &ndash; noden är startad men har inte börjat navigera.</li>
+  <li><strong>NAVIGATING</strong> &ndash; ett mål är skickat och noden väntar på feedback/resultat från Nav2.</li>
+  <li><strong>WAITING</strong> &ndash; roboten har nått ett waypoint och väntar en kort stund innan nästa.</li>
+  <li><strong>RECOVERING</strong> &ndash; något gick fel (t.ex. Nav2 rapporterade failure); noden försöker hantera situationen.</li>
+  <li><strong>DONE</strong> &ndash; alla waypoints är besökta.</li>
+</ul>
+
+<p>
+  Tillståndsövergångarna ska styras av <strong>feedback och resultat från action servern</strong>,
+  inte av sleep-loopar. Använd <code>rclpy.action.ActionClient</code> och hantera
+  <code>goal_response_callback</code>, <code>feedback_callback</code> och <code>result_callback</code>.
+</p>
+
+<p>
+  Noden ska logga tydligt (med <code>self.get_logger()</code>) vilket tillstånd den befinner sig i
+  och vilket waypoint den navigerar mot.
+</p>
+
+<p><strong>Tänk på:</strong> Skicka målet som en <code>geometry_msgs/PoseStamped</code> med
+<code>frame_id = "map"</code> och sätt en rimlig orientering (quaternion) utifrån yaw-värdet i
+YAML-filen. Quaternion från yaw beräknas som:</p>
+<pre><code>from geometry_msgs.msg import Quaternion
+import math
+
+def yaw_to_quaternion(yaw):
+    q = Quaternion()
+    q.z = math.sin(yaw / 2.0)
+    q.w = math.cos(yaw / 2.0)
+    return q</code></pre>
+
+<h4>3.2.4 Säkerhetsnod med cmd_vel-prioritering</h4>
+
+<p>
+  Säkerhetsnoden ska köra parallellt med navigeringen och alltid ha möjlighet att
+  ta kontroll över roboten. Ni ska använda paketet <code>twist_mux</code> för att
+  hantera prioritering mellan navigeringsnoden och säkerhetsnoden.
+</p>
+
+<p>Installera twist_mux om det inte redan finns:</p>
+<pre><code>sudo apt install ros-jazzy-twist-mux</code></pre>
+
+<p>
+  Konfigurationen innebär att Nav2 publicerar på ett eget topic (t.ex. <code>/cmd_vel_nav</code>)
+  och säkerhetsnoden publicerar på ett annat (t.ex. <code>/cmd_vel_safety</code>).
+  <code>twist_mux</code> kombinerar dessa och publicerar på <code>/cmd_vel</code> som roboten lyssnar på.
+  Säkerhetsnoden ska ha <strong>högre prioritet</strong>.
+</p>
+
+<p>Exempel på twist_mux-konfiguration (<code>twist_mux.yaml</code>):</p>
+<pre><code>twist_mux:
+  ros__parameters:
+    topics:
+      navigation:
+        topic   : /cmd_vel_nav
+        timeout : 0.5
+        priority: 10
+      safety:
+        topic   : /cmd_vel_safety
+        timeout : 0.5
+        priority: 100</code></pre>
+
+<p>
+  Ändra Nav2:s output-topic till <code>/cmd_vel_nav</code> via Nav2-parametrarna, eller använd
+  ett remapping-argument när ni startar Nav2. Starta twist_mux med:
+</p>
+<pre><code>ros2 run twist_mux twist_mux \
+  --ros-args --params-file twist_mux.yaml \
+  --remap cmd_vel_out:=cmd_vel</code></pre>
+
+<p>
+  Säkerhetsnoden ska prenumerera på <code>/scan</code> (LIDAR) och beräkna minsta avstånd
+  till ett hinder <strong>framåt</strong> (välj en rimlig vinkelsektor, t.ex. &plusmn;30&deg;).
+  Om minimiavståndet understiger ett tröskelvärde som ni väljer själva ska noden:
+</p>
+<ol>
+  <li>Publicera ett stopkommando (<code>Twist</code> med alla nollor) på <code>/cmd_vel_safety</code>.</li>
+  <li>Sedan publicera ett backa-kommando under en kortare tid.</li>
+  <li>Logga att säkerhetsbeteendet aktiverats.</li>
+</ol>
+
+<p>
+  Ni bestämmer själva tröskelvärdena, men de ska vara motiverade och fungera
+  under redovisningen.
+</p>
+
+<h4>3.2.5 Krav på redovisningen</h4>
+<p>Under redovisningen ska ni:</p>
+<ul>
+  <li>Visa att roboten autonomt navigerar hela waypoint-sekvensen utan manuell inblandning.</li>
+  <li>Visa att tillståndsmaskinen fungerar: logga eller visualisera tillståndsövergångarna live.</li>
+  <li>Demonstrera säkerhetsnoden: placera ett hinder i robotens väg och visa att den stannar och backar.</li>
+  <li>Förklara er kodstruktur: var sker tillståndsövergångarna, hur fungerar prioriteringen i twist_mux?</li>
+</ul>
+
+<hr />
+
+<h3>Del 3.3 &ndash; Rapport</h3>
+
+<p>Skriv en rapport på 2&ndash;3 sidor som innehåller:</p>
+<ul>
+  <li>En bild av den kartlagda labyrinten med era waypoints utmärkta.</li>
+  <li>Ett diagram (kan vara handritad figur) som visar er tillståndsmaskin: tillstånd, övergångar och vilka händelser som triggar dem.</li>
+  <li>En kortfattad beskrivning av hur SLAM fungerar och vad som lagras i kartans <code>.yaml</code>- och <code>.pgm</code>-filer.</li>
+  <li>En motivering av era valda tröskelvärden för säkerhetsnoden.</li>
+  <li>Reflektion: Vad fungerade bra? Vad hade kunnat göras annorlunda?</li>
+</ul>
+
+<p>Ladda upp rapporten som PDF här på Canvas.</p>
+
+<hr />
+
+<p><em>Betyg: U eller G. Inlämning: rapport + godkänd redovisning.</em></p>
