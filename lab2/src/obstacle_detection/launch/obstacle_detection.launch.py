@@ -1,5 +1,5 @@
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument
+from launch.actions import DeclareLaunchArgument, TimerAction
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
@@ -39,8 +39,10 @@ def generate_launch_description():
     
     # Create and return launch description
     ld = LaunchDescription()
-    ld.add_action(stop_distance_arg)  # Add the declaration first
-    ld.add_action(obstacle_detection_cmd)
+    ld.add_action(stop_distance_arg)
     ld.add_action(lidar_visualizer_cmd)
-    
-    return ld 
+    # Delay robot movement so RViz has time to start before the robot begins moving.
+    # Students do not need to modify this — it is part of the given infrastructure.
+    ld.add_action(TimerAction(period=10.0, actions=[obstacle_detection_cmd]))
+
+    return ld
