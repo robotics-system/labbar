@@ -88,11 +88,27 @@ class ObstacleDetection(Node):
         - self.scan_ranges contains distances to obstacles in meters
         - Each value represents distance at a different angle around the robot
         - Values less than self.stop_distance indicate a close obstacle
+        - OBS! Du behöver också spara msg.angle_min och msg.angle_increment i
+          scan_callback för att beräkna vilken vinkel varje mätpunkt har.
+          TB3-lasern rapporterar vinklar 0..2π — normalisera med:
+              angle = atan2(sin(angle), cos(angle))   # → [-π, π]
+          Annars är roboten blind på sin HÖGRA sida!
         
         UNDERSTANDING POSE (Pose message)
         - self.pose.position.x: x position of the robot
         - self.pose.position.y: y position of the robot
         - yaw: heading of the robot, converted from quaternions for your convinence (in radians)
+
+        SPAWN OFFSET (viktigt för go-to-goal!)
+        - Roboten spawnar vid (-1.5, -0.5) i Gazebo-världskoordinater, men
+          odometrin (/odom) startar alltid i origo (0, 0) vid spawn-punkten.
+        - Om du anger ett mål i världskoordinater (t.ex. x=2.0, y=1.0 från Gazebo)
+          måste du kompensera:
+              world_x = self.pose.position.x + (-1.5)   # spawn_x
+              world_y = self.pose.position.y + (-0.5)   # spawn_y
+          och sedan beräkna vinkel/avstånd mot målet från (world_x, world_y).
+        - Alternativt: ange målet relativt till spawn (odom-koordinater) och
+          skippa konverteringen — men då matchar koordinaterna inte Gazebo-kartan.
 
         CREATE CONTROL SIGNAL FOR ANGULAR VELOCITY
         - Compare angle to goal or obstacle with the current angle of the robot, i.e
@@ -110,12 +126,21 @@ class ObstacleDetection(Node):
         """
         # Filter out invalid readings (very small values, infinity, or NaN)
         valid_ranges = [r for r in self.scan_ranges if not math.isinf(r) and not math.isnan(r) and r > 0.01]
-        
+
         # If no valid readings, assume no obstacles
         if not valid_ranges:
             self.cmd_vel_pub.publish(self.tele_twist)
             return
-            
+
+        # TIPS: Kolla bara vinklar ±90° framåt istället för full 360°.
+        # Hinder som roboten redan passerat (bakom/vid sidan) ska inte
+        # fortsätta trigga undvikningsbeteendet — det orsakar väggföljning.
+
+        # TIPS: När du väljer undvikningsriktning (t.ex. 90° åt vänster), lås den
+        # riktningen för hela undvikningsfasen. Om ett nytt hinder dyker upp medan
+        # roboten already undviker och du räknar om kursen med den gamla sidan
+        # låst — blir resultatet fel riktning och roboten följer väggen.
+
         # Find the closest obstacle in any direction (full 360° scan)
         obstacle_distance = min(valid_ranges)
 
