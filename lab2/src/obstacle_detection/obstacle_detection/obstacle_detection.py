@@ -2,12 +2,11 @@
 from geometry_msgs.msg import Twist
 import rclpy
 from rclpy.node import Node
-from rclpy.qos import qos_profile_sensor_data
+from rclpy.qos import QoSDurabilityPolicy, QoSReliabilityPolicy, qos_profile_sensor_data
 from rclpy.qos import QoSProfile
 from sensor_msgs.msg import LaserScan
 import math
-from nav_msgs.msg import Odometry
-from geometry_msgs.msg import Pose
+from geometry_msgs.msg import Pose, PoseWithCovarianceStamped
 from tf_transformations import euler_from_quaternion
 
 
@@ -26,7 +25,8 @@ class ObstacleDetection(Node):
         self.stop_distance = self.get_parameter("stop_distance").get_parameter_value().double_value
         self.get_logger().info(f"Using stop_distance: {self.stop_distance}m")
         self.pose = Pose()
-        self.odom_sub = self.create_subscription(Odometry, "odom", self.get_odom_callback, qos_profile=qos_profile_sensor_data)
+        amcl_qos = QoSProfile(depth=1, reliability=QoSReliabilityPolicy.RELIABLE, durability=QoSDurabilityPolicy.TRANSIENT_LOCAL)
+        self.odom_sub = self.create_subscription(PoseWithCovarianceStamped, "amcl_pose", self.get_odom_callback, qos_profile=amcl_qos)
         # Store received data
         self.scan_ranges = []
         self.has_scan_received = False
@@ -101,14 +101,14 @@ class ObstacleDetection(Node):
 
         SPAWN OFFSET (viktigt för go-to-goal!)
         - Roboten spawnar vid (-1.5, -0.5) i Gazebo-världskoordinater, men
-          odometrin (/odom) startar alltid i origo (0, 0) vid spawn-punkten.
+          /odom startar alltid i origo (0, 0) vid spawn-punkten.
         - Om du anger ett mål i världskoordinater (t.ex. x=2.0, y=1.0 från Gazebo)
-          måste du kompensera:
-              world_x = self.pose.position.x + (-1.5)   # spawn_x
-              world_y = self.pose.position.y + (-0.5)   # spawn_y
+          behöver du inte kompensera eftersom self.pose kommer från /amcl_pose:
+              world_x = self.pose.position.x
+              world_y = self.pose.position.y
           och sedan beräkna vinkel/avstånd mot målet från (world_x, world_y).
-        - Alternativt: ange målet relativt till spawn (odom-koordinater) och
-          skippa konverteringen — men då matchar koordinaterna inte Gazebo-kartan.
+        - Om du använder /odom separat: ange målet relativt till spawn och
+          blanda inte odom-koordinater med self.pose från /amcl_pose.
 
         CREATE CONTROL SIGNAL FOR ANGULAR VELOCITY
         - Compare angle to goal or obstacle with the current angle of the robot, i.e
