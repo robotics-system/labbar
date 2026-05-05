@@ -62,9 +62,40 @@ source ~/.bashrc</code></pre>
     <li>S&auml;tt ut en m&aring;lpunkt p&aring; kartan med hj&auml;lp av Nav2 och Rviz, roboten ska sedan navigera till punkten.</li>
     <li>Om roboten kommer f&ouml;r n&auml;ra v&auml;ggen s&aring; ska den stanna och sedan backa en liten stund. Ni best&auml;mmer sj&auml;lva hur n&auml;ra v&auml;ggen som &auml;r f&ouml;r n&auml;ra, och hur l&aring;ng tid roboten ska backa. Men t&auml;nk p&aring; att det ska kunna redovisas under redovisningen.</li>
 </ul>
-<h2>3.3&nbsp; Skriv rapport</h2>
-<p>Samla erat arbete i en rapport d&auml;r ni beskriver vad ni gjort, tar med en karta ni SLAMat och beskriver kortfattat hur SLAM fungerar.</p>
-<p>1-2sidor.</p>
+<h2>3.3 Beteendebaserad styrning p&aring; fysisk robot</h2>
+<p>I Lab 2.3 implementerade ni viktad go-to-goal + obstacle avoidance i simulatorn. Nu ska ni anv&auml;nda samma kod p&aring; den fysiska roboten.</p>
+<p><strong>Ingen karta beh&ouml;vs</strong> &mdash; styrningen anv&auml;nder enbart <code>/odom</code> och <code>/scan</code>, precis som i simulatorn. N&auml;r bringup startar nollst&auml;lls odometrin alltid till (0,&nbsp;0), s&aring; roboten b&ouml;rjar alltid i koordinatorigo oavsett var den st&aring;r fysiskt.</p>
+<p>&nbsp;</p>
+<h3>Skillnader mot simulatorn</h3>
+<p>Koden fr&aring;n Lab 2.3 beh&ouml;ver troligtvis sm&aring; justeringar. Nedanst&aring;ende &auml;r de vanligaste fallgroparna:</p>
+<ul>
+    <li><strong>Vinkelnormalisering &auml;r kritisk p&aring; fysisk robot.</strong> B&aring;de LDS-02 och LDS-03 rapporterar vinklar fr&aring;n 0 till 2&pi;, precis som Gazebo-simulatorn. Saknar ni normaliseringen (<code>atan2(sin(a), cos(a))</code>) s&aring; &auml;r roboten blind p&aring; h&ouml;ger sida &mdash; n&auml;mnt i Lab 2 men &auml;nnu viktigare h&auml;r.</li>
+    <li><strong>LDS-02 uppdateras i 5&nbsp;Hz, LDS-03 i 10&nbsp;Hz</strong> (j&auml;mf&ouml;rt med Gazebos 10&nbsp;Hz). Om er robot har LDS-02 reagerar obstacle avoidance n&aring;got tr&ouml;gare &mdash; ni kan beh&ouml;va &ouml;ka <code>stop_distance</code> lite j&auml;mf&ouml;rt med simulatorn s&aring; att roboten hinner reagera.</li>
+    <li><strong>Mer brus &auml;n i simulatorn.</strong> Riktiga sensorer returnerar fler <code>inf</code>- och <code>nan</code>-v&auml;rden. Filtreringen fr&aring;n Lab 2 (<code>math.isfinite(r)</code>) &auml;r viktigare h&auml;r &mdash; se till att den finns kvar.</li>
+    <li><strong>Odometridrift.</strong> Hjulen kan slira p&aring; riktiga golvet, s&aring; (0,&nbsp;0) &rarr; (2.5,&nbsp;0) kanske inte st&auml;mmer exakt. &Auml;r m&aring;let n&auml;ra nog (inom ~0.2&nbsp;m) b&ouml;r det fungera, men t&auml;nk p&aring; att ett stort m&aring;l &auml;r robustare mot drift.</li>
+</ul>
+<p>&nbsp;</p>
+<h3>Uppgift</h3>
+<ol>
+    <li>Starta bringup p&aring; roboten (om inte redan gjort). Odometrin nollst&auml;lls automatiskt &mdash; det &auml;r detta som g&ouml;r att ni alltid startar i (0,&nbsp;0).</li>
+    <li>Starta er nod fr&aring;n Lab 2.3 p&aring; er dator. M&aring;lkoordinaten meddelas av handledaren p&aring; redovisningsdagen (n&aring;got i stil med (2.5,&nbsp;0)).</li>
+    <li>Roboten ska k&ouml;ra mot m&aring;let med viktad go-to-goal + obstacle avoidance.</li>
+    <li>Handledaren placerar ett fysiskt hinder (en l&aring;da eller hink) p&aring; v&auml;gen. Roboten ska klara sig runt det utan att krocka.</li>
+    <li>N&auml;r m&aring;let &auml;r n&aring;tt ska roboten stanna.</li>
+</ol>
+<p>&nbsp;</p>
+<div style="background-color: #fff3cd; padding: 15px; border-left: 5px solid #ffc107; margin-top: 10px; font-family: sans-serif;">
+    <strong>Tips inf&ouml;r redovisningen:</strong>
+    <ul>
+        <li>Testa koden hemma i simulatorn med de ungef&auml;rliga koordinaterna f&ouml;rst s&aring; att logiken fungerar, justera sedan parametrar p&aring; plats.</li>
+        <li>Om roboten spinner p&aring; st&aring;llet: kontrollera att <code>LDS_MODEL</code> st&auml;mmer (se avsnitt 3.1) &mdash; fel modell ger ingen lidar-data och roboten fastnar i avoid-beteendet.</li>
+        <li>Om roboten inte stannar vid m&aring;let: odometrin kan ha driftat. Justera m&aring;lradien (<code>goal_tolerance</code> eller liknande) s&aring; att n&aring;got st&ouml;rre omr&aring;de r&auml;knas som "framme".</li>
+    </ul>
+</div>
+<p>&nbsp;</p>
+<h2>3.4&nbsp; Skriv rapport</h2>
+<p>Samla erat arbete i en rapport d&auml;r ni beskriver vad ni gjort, tar med en karta ni SLAMat och beskriver kortfattat hur SLAM fungerar. Beskriv ocks&aring; kort hur er beteendebaserade styrning fungerar och vilka anpassningar ni beh&ouml;vde g&ouml;ra fr&aring;n simulatorn.</p>
+<p>1-2 sidor.</p>
 <p>Ladda upp rapporten h&auml;r p&aring; Canvas</p>
 <p>&nbsp;</p>
 <p>&nbsp;</p>
