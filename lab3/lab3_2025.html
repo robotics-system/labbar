@@ -1,0 +1,71 @@
+<p>I den h&auml;r laborationen kommer vi att anv&auml;nda oss av roboten Turtlebot 3 - Burger. Vi har totalt 9 robotar, s&aring; det kommer kr&auml;vas att ni samsas om robotarna.</p>
+<p>&nbsp;</p>
+<p>Den h&auml;r labben examinerar l&auml;randem&aring;l 4-5</p>
+<p>4. utveckla och implementera mjukvara f&ouml;r enklare autonomt beslutstagande, &nbsp;<br />5. utveckla och implementera ett agerande hos en robot med s&auml;kerhet i &aring;tanke</p>
+<p>Betyg p&aring; LAB3 &auml;r U eller G.</p>
+<p>&nbsp;</p>
+<p>Ni kommer ha ett micro-SD kort per grupp. Dessa <strong>ska ges tillbaka</strong> efter godk&auml;nd projektredovisning (dvs, ni har samma kort p&aring; lab3 och projektet). SD-korten &auml;r nurmerade med erat gruppnummer. P&aring; SD-korten &auml;r allting redan installerat och konfigurerat &mdash; ni beh&ouml;ver inte installera n&aring;got sj&auml;lva. Ni beh&ouml;ver d&auml;remot &auml;ndra ROS_DOMAIN_ID p&aring; era <strong>datorer</strong> enligt f&ouml;ljande tabell. S&auml;tter ni er vid en ny dator s&aring; kommer ni beh&ouml;va &auml;ndra ROS_DOMAIN_ID igen.</p>
+<p>Grupp 1 - ROS_DOMAIN_ID = 101</p>
+<p>Grupp 2 - ROS_DOMAIN_ID = 102</p>
+<p>....</p>
+<p>Grupp 20 - ROS_DOMAIN_ID = 120</p>
+<p>ROS_DOMAIN_ID p&aring; era SD-kort &auml;r redan satta och ska st&auml;mma &ouml;verens med ovanst&aring;ende tabell.</p>
+<p>Dvs, ni beh&ouml;ver <strong>INTE</strong> &auml;ndra ROS_DOMAIN_ID p&aring; er robot.</p>
+<p>&nbsp;</p>
+<p>S&auml;tt ROS_DOMAIN_ID p&aring; er dator i terminalen (byt ut <code>1XX</code> mot ert ID):</p>
+<pre><code>sed -i 's/^export ROS_DOMAIN_ID=.*/export ROS_DOMAIN_ID=1XX/' ~/.bashrc
+source ~/.bashrc</code></pre>
+<p>Om raden saknas i <code>~/.bashrc</code>, l&auml;gg till den manuellt:</p>
+<pre><code>echo 'export ROS_DOMAIN_ID=1XX' >> ~/.bashrc
+source ~/.bashrc</code></pre>
+<p>&nbsp;</p>
+<h2>3.1 SLAM</h2>
+<ul>
+    <li>S&auml;tt in erat micro SD-kort i kortl&auml;saren p&aring; den raspberry pi som sitter p&aring; roboten.&nbsp;<br /><img src="https://canvas.mdu.se/courses/18700/files/2733463/preview" alt="IMG_3589.jpg" width="294" height="392" data-api-endpoint="https://canvas.mdu.se/api/v1/courses/18700/files/2733463" data-api-returntype="File" /></li>
+    <li>S&auml;tt in batteriet i roboten och koppla i den r&ouml;d/svarta kabeln. Den andra l&aring;ter ni vara urkopplad, se bild nedan:</li>
+    <li><img src="https://canvas.mdu.se/courses/18700/files/2733471/preview" alt="IMG_3588.jpg" width="239" height="319" data-api-endpoint="https://canvas.mdu.se/api/v1/courses/18700/files/2733471" data-api-returntype="File" /></li>
+    <li><img src="https://canvas.mdu.se/courses/18700/files/2733456/preview" alt="IMG_3586.jpg" width="239" height="318" data-api-endpoint="https://canvas.mdu.se/api/v1/courses/18700/files/2733456" data-api-returntype="File" /></li>
+    <li>Koppla upp er p&aring; roboten via SSH. IP-adresserna &auml;r:
+        <ul>
+            <li>Robot 1: <code>ssh ubuntu@10.132.184.11</code></li>
+            <li>Robot 2: <code>ssh ubuntu@10.132.184.12</code></li>
+            <li>Robot 3: <code>ssh ubuntu@10.132.184.13</code></li>
+            <li>Robot 4: <code>ssh ubuntu@10.132.184.14</code></li>
+            <li>Robot 5: <code>ssh ubuntu@10.132.184.15</code></li>
+            <li>Robot 6: <code>ssh ubuntu@10.132.184.16</code></li>
+            <li>Robot 7: <code>ssh ubuntu@10.132.184.17</code></li>
+            <li>Robot 8: <code>ssh ubuntu@10.132.184.18</code></li>
+            <li>Robot 9: <code>ssh ubuntu@10.132.184.19</code></li>
+        </ul>
+    </li>
+    <li>Kontrollera vilken lidar-version roboten ni valt har &mdash; det st&aring;r tryckt p&aring; sj&auml;lva sensorn: <strong>LDS-02</strong> eller <strong>LDS-03</strong>. Kontrollera sedan vilket v&auml;rde som &auml;r satt p&aring; ert SD-kort (k&ouml;r detta kommando p&aring; roboten via SSH):
+        <pre><code>echo $LDS_MODEL</code></pre>
+        Om v&auml;rdet <strong>inte</strong> st&auml;mmer &ouml;verens med den fysiska lidaren m&aring;ste ni &auml;ndra det p&aring; roboten (inte laptopen). K&ouml;r r&auml;tt kommando nedan och starta sedan om bringup:
+        <p><strong>Byta till LDS-02:</strong></p>
+        <pre><code>sed -i 's/^export LDS_MODEL=.*/export LDS_MODEL=LDS-02/' ~/.bashrc
+source ~/.bashrc</code></pre>
+        <p><strong>Byta till LDS-03:</strong></p>
+        <pre><code>sed -i 's/^export LDS_MODEL=.*/export LDS_MODEL=LDS-03/' ~/.bashrc
+source ~/.bashrc</code></pre>
+    </li>
+    <li>Starta bringup p&aring; roboten (via SSH):
+        <pre><code>ros2 launch turtlebot3_bringup robot.launch.py</code></pre>
+    </li>
+    <li>K&ouml;r ig&aring;ng en SLAM-nod fr&aring;n er dator och kartl&auml;gg en labyrint &mdash; detta ska kunna g&ouml;ras under redovisning ocks&aring;</li>
+    <li>Spara kartan</li>
+    <li>Om batteriet beh&ouml;ver laddas, ta ur batteriet ur roboten och ladda med batteriladdaren, se bild nedan.</li>
+</ul>
+<p><img src="https://canvas.mdu.se/courses/18700/files/2733455/preview" alt="IMG_3587.jpg" width="291" height="389" data-api-endpoint="https://canvas.mdu.se/api/v1/courses/18700/files/2733455" data-api-returntype="File" /></p>
+<h2>3.2 Navigera p&aring; karta</h2>
+<ul>
+    <li>Ladda kartan ni sparat tidigare</li>
+    <li>S&auml;tt ut en m&aring;lpunkt p&aring; kartan med hj&auml;lp av Nav2 och Rviz, roboten ska sedan navigera till punkten.</li>
+    <li>Om roboten kommer f&ouml;r n&auml;ra v&auml;ggen s&aring; ska den stanna och sedan backa en liten stund. Ni best&auml;mmer sj&auml;lva hur n&auml;ra v&auml;ggen som &auml;r f&ouml;r n&auml;ra, och hur l&aring;ng tid roboten ska backa. Men t&auml;nk p&aring; att det ska kunna redovisas under redovisningen.</li>
+</ul>
+<h2>3.3&nbsp; Skriv rapport</h2>
+<p>Samla erat arbete i en rapport d&auml;r ni beskriver vad ni gjort, tar med en karta ni SLAMat och beskriver kortfattat hur SLAM fungerar.</p>
+<p>1-2sidor.</p>
+<p>Ladda upp rapporten h&auml;r p&aring; Canvas</p>
+<p>&nbsp;</p>
+<p>&nbsp;</p>
+<p>&nbsp;</p>
